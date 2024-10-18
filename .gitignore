@@ -1,0 +1,80 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+*.pyo
+
+# Environment variables
+.env
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+
+# FastAPI/Uvicorn
+*.log
+
+# Byte-compiled / optimized / DLL files
+*.pyc
+*.pyd
+*.pyo
+*.pdb
+
+# IDE and editor specific files
+.vscode/
+.idea/
+*.swp
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Dependencies
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Pytest
+.cache/
+.pytest_cache/
+
+# Mypy and Pyright
+.mypy_cache/
+.dmypy.json
+dmypy.json
+# Type checking reports
+*.pyre/
+pyright-*.json
+
+# Coverage reports
+htmlcov/
+.tox/
+.coverage
+coverage.xml
+*.cover
+.hypothesis/
+
+# Build artifacts
+build/
+dist/
+*.egg
+*.tar.gz
+*.zip
+
+# Docker
+docker-compose.override.yml
+.env.docker
+
+# Logs and output
+logs/
+*.log
+*.out
+*.err
+
+# Miscellaneous
+*.bak
+*.tmp
+
