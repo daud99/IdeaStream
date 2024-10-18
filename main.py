@@ -7,7 +7,7 @@ import uvicorn
 from core.config import settings
 from core.database import init_db
 
-from api.v1 import audio
+from api.v1 import audio, meeting
 
 from models.transcript import Transcript
 
@@ -24,7 +24,8 @@ app = FastAPI(
 )
 
 # Include audio routes under v1 API version
-app.include_router(audio.router, prefix="/v1")
+app.include_router(audio.router, prefix="/api")
+app.include_router(meeting.router, prefix="/api")
 
 @app.get("/")
 def read_root():
