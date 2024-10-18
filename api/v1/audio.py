@@ -9,6 +9,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     while True:
         try:
+            print('here')
             # Receive binary audio data
             audio_data = await websocket.receive_bytes()
             # Process audio data via OpenAI
