@@ -2,6 +2,7 @@ from datetime import datetime
 
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
 from core.config import settings
@@ -23,6 +24,13 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  # Add your React app's URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # Include audio routes under v1 API version
 app.include_router(audio.router, prefix="/api")
 app.include_router(meeting.router, prefix="/api")

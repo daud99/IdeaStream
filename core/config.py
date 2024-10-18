@@ -10,6 +10,7 @@ class Settings:
     PORT: int = int(os.getenv("PORT", 8000))
     RELOAD: bool = os.getenv("RELOAD", "true").lower() == "true"
     OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY")
+    OPENAI_REALTIME_URL = "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01"
     MONGODB_URL: str = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
     DB_NAME: str = os.getenv("DB_NAME", "test")
 
