@@ -91,7 +91,7 @@ async def connect_to_openai_realtime(ws: WebSocket):
                 "type": "session.update",
                 "session": {
                     "instructions": "You are a helpful assistant that transcribes audio to text.",
-                    "modality": ["text", "audio"],
+                    "modalities": ["text", "audio"],
                     "input_audio_format": "pcm16",
                     "input_audio_sample_rate": 24000,
                     "input_audio_transcription": {
