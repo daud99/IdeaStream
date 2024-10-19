@@ -88,7 +88,7 @@ async def connect_to_openai_realtime(ws: WebSocket):
         # Setting a session
         await openai_ws.send(
             json.dumps({
-                "type": "session.create",
+                "type": "session.update",
                 "session": {
                     "instructions": "You are a helpful assistant that transcribes audio to text.",
                     "modality": ["text", "audio"],
@@ -111,7 +111,7 @@ async def connect_to_openai_realtime(ws: WebSocket):
                     res_1=json.loads(response)
                     print(res_1)
                     print(res_1)
-                    if res_1["type"]=="session.created":
+                    if res_1["type"]=="session.updated":
                         text_message = {
                         'event_id':res_1['event_id'],
                         "type": "conversation.item.create",
