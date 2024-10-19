@@ -5,5 +5,4 @@ router = APIRouter()
 
 @router.websocket("/audio")
 async def websocket_endpoint(websocket: WebSocket):
-    await websocket.accept()
     await connect_to_openai_realtime(websocket)

@@ -13,7 +13,7 @@ class Meeting(Document):
         collection = "meetings"
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "title": "Project Kickoff",
                 "description": "Initial meeting to discuss the project requirements.",

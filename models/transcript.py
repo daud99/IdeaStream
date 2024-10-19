@@ -11,7 +11,7 @@ class Transcript(Document):
         collection = "transcripts"
 
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "meeting_id": "12345",
                 "text": "This is the meeting transcript...",
