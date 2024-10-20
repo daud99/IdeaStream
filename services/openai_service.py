@@ -123,7 +123,7 @@ async def connect_to_openai_realtime(ws: WebSocket):
                             if res["type"] == "response.done":
                                 print('res')
                                 print(res)
-
+                                break
                 except WebSocketDisconnect:
                     logger.info("Client disconnected")
                     break
