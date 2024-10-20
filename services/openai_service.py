@@ -4,8 +4,9 @@ import base64
 import io
 import logging
 import websockets
+import pydub
+import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from pydub import AudioSegment
 
 from core.config import settings
 OPENAI_API_KEY = settings.OPENAI_API_KEY
@@ -18,10 +19,9 @@ openai_connected = False
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Function to convert webm to PCM16 bytes using pydub
-def convert_webm_to_pcm_bytes(webm_file_path):
-    # Load the webm file
-    audio = pydub.AudioSegment.from_file(webm_file_path, format='webm')
+def convert_webm_to_pcm_bytes(webm_bytes):
+    # Load the webm file from bytes
+    audio = pydub.AudioSegment.from_file(io.BytesIO(webm_bytes), format='webm')
 
     # Resample to 24kHz mono PCM16
     pcm_audio = audio.set_frame_rate(24000).set_channels(1).set_sample_width(2)
@@ -59,8 +59,6 @@ async def connect_to_openai_realtime(ws: WebSocket):
     """
     global openai_ws, openai_connected
     try:
-        await ws.accept()
-
         # Ensure a connection to OpenAI is established only once
         await connect_to_openai()    
 
@@ -82,22 +80,56 @@ async def connect_to_openai_realtime(ws: WebSocket):
                 }
             })
         )
+        await ws.accept()
+        WEBM_FILE_PATH = "/Users/daudahmed/Downloads/audio.webm"
+        # Open the file in append-binary mode
+        with open(WEBM_FILE_PATH, 'ab') as audio_file:
+            while True:
+                try:
+                    # Receive data from the WebSocket as bytes
+                        # time.sleep(10)
+                        data = await ws.receive_bytes()
+                        print(len(data))
+                        audio_file.write(data)
+                        # Send the audio data to OpenAI 
+                        
+                        # Convert webm to PCM16 bytes
+                        pcm_bytes = convert_webm_to_pcm_bytes(data)
 
-        while True:
-            try:
-                # Receive audio data from the client
-                audio_data = await ws.receive_bytes()
-                if audio_data == b"":
+                        # Encode PCM bytes to base64
+                        base64_audio_data = base64.b64encode(pcm_bytes).decode('utf-8')
+
+                        # Create the event structure
+                        event = {
+                            "type": "conversation.item.create",
+                            "item": {
+                                "type": "message",
+                                "role": "user",
+                                "content": [
+                                    {
+                                        "type": "input_audio",
+                                        "audio": base64_audio_data
+                                    }
+                                ]
+                            }
+                        }
+
+
+                        # Send data over WebSocket
+                        await openai_ws.send(json.dumps(event))
+                        await openai_ws.send(json.dumps({"type": "response.create"}))
+                        async for response in openai_ws:
+                            res = json.loads(response)
+                            if res["type"] == "response.done":
+                                print('res')
+                                print(res)
+
+                except WebSocketDisconnect:
+                    logger.info("Client disconnected")
                     break
-
-                # Send audio data to OpenAI
-                await openai_ws.send(audio_data)
-
-                # Receive transcription from OpenAI
-                response = await openai_ws.recv()
-                await ws.send_text(response)
-            except WebSocketDisconnect:
-                break
+                except Exception as e:
+                    logger.error(f"Error receiving data: {e}")
+                    break
 
        
                
