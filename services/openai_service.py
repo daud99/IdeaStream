@@ -18,32 +18,16 @@ openai_connected = False
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def audio_to_item_create_event(audio_bytes: bytes) -> str:
-    try:
-        # Load the audio file from the byte stream without specifying format
-        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="webm")
-        
-        # Resample to 24kHz mono pcm16
-        pcm_audio = audio.set_frame_rate(24000).set_channels(1).set_sample_width(2).raw_data
-        
-        # Encode to base64 string
-        encoded_chunk = base64.b64encode(pcm_audio).decode()
-        
-        event = {
-            "type": "input_audio_buffer.append", 
-            "audio": encoded_chunk
-            # "item": {
-            #     "type": "message",
-            #     "role": "user",
-            #     "content": [{
-            #         "type": "input_audio", 
-            #     }]
-            # }
-        }
-        return json.dumps(event)
-    except Exception as e:
-        logger.error(f"Error processing audio: {e}")
-        return None
+# Function to convert webm to PCM16 bytes using pydub
+def convert_webm_to_pcm_bytes(webm_file_path):
+    # Load the webm file
+    audio = pydub.AudioSegment.from_file(webm_file_path, format='webm')
+
+    # Resample to 24kHz mono PCM16
+    pcm_audio = audio.set_frame_rate(24000).set_channels(1).set_sample_width(2)
+
+    # Return raw audio data
+    return pcm_audio.raw_data
 
 async def connect_to_openai():
     global openai_ws, openai_connected
@@ -85,94 +69,38 @@ async def connect_to_openai_realtime(ws: WebSocket):
             await ws.close()
             return
         
-        # # Setting a session
-        # await openai_ws.send(
-        #     json.dumps({
-        #         "type": "session.update",
-        #         "session": {
-        #             "instructions": "You are a helpful assistant that transcribes audio to text.",
-        #             "modalities": ["text","audio"],
-        #             # "input_audio_format": "pcm16",
-        #             # "input_audio_transcription": {
-        #             #     "model": "whisper-1"
-        #             # },
-        #         }
-        #     })
-        # )
-        
-        # logger.info(f"SESSION SETUP SUCCESSFULLY!")
-
-        async for response in openai_ws:
-            res=json.loads(response)
-            print('res')
-            print(res)
-            if res["type"]=="session.updated":
-                text_message = {
-                    'event_id':res['event_id'],
-                    "type": "conversation.item.create",
-                    "item": {
-                        "type": "message",
-                        "role": "user",
-                        "content": [{"type": "input_text", "text":"You will be receiving the audio in the subsequent messages which you have to convert into text that's all"}]
-                        }
+        await openai_ws.send(
+            json.dumps({
+                "type": "session.update",
+                "session": {
+                    "modalities": ["text"],
+                    "instructions": "You are a helpful assistant that transcribes audio to text.",
+                    "input_audio_format": "pcm16",
+                    "input_audio_transcription": {
+                        "model": "whisper-1"
+                    }
                 }
-                
-                print('sending text message')
-                print(text_message)
-                await openai_ws.send(json.dumps(text_message))
-            
-            if res["type"]=="session.created":
-                # Receive data from the WebSocket as bytes from REACT Frontend
-                # Communication loop
-                while True:
-                    try:
-                        print('before')
-                        # Receive data from the WebSocket as bytes
-                        data = await ws.receive_bytes()
-                        print('data len')
-                        print(len(data))
-                        send_audio = audio_to_item_create_event(data)
-                        print("sending following")
-                        print(send_audio)
-                        await openai_ws.send(send_audio)
-                        print('after')
+            })
+        )
 
+        while True:
+            try:
+                # Receive audio data from the client
+                audio_data = await ws.receive_bytes()
+                if audio_data == b"":
+                    break
 
-                    except WebSocketDisconnect:
-                        openai_connected = False
-                        logger.info("Client disconnected")
-                        break
-                    except Exception as e:
-                        logger.error(f"Error receiving data: {e}")
-                        break
+                # Send audio data to OpenAI
+                await openai_ws.send(audio_data)
+
+                # Receive transcription from OpenAI
+                response = await openai_ws.recv()
+                await ws.send_text(response)
+            except WebSocketDisconnect:
+                break
+
+       
                
-                # async for response in openai_ws:
-                #     res2=json.loads(response)
-                #     print('res2')
-                #     print(res2)
-                #     if res2['type'] == 'conversation.item.created':
-                #         message = {
-                #             'event_id': res['event_id'],
-                #             "type": "response.create",
-                #             "response": {
-                #             "modalities": ["text", "audio"],
-                #             "instructions": "Please assist the user",
-                #             }
-                #         }
-                #         await openai_ws.send(json.dumps(message))
-                #         async for response in openai_ws:
-                #             result = json.loads(response)
-                #             print('result', result)
-
-            # if res["type"]=="input_audio_buffer.appended":
-            #     # Receive data from the WebSocket as bytes from REACT Frontend
-            #     data = await ws.receive_bytes()
-            #     print('data len')
-            #     print(len(data))
-            #     send_audio = audio_to_item_create_event(data)
-            #     print("sending following")
-            #     print(send_audio)
-            #     await openai_ws.send(send_audio)
 
     except websockets.exceptions.ConnectionClosed:
         logger.error("OpenAI WebSocket connection closed")
