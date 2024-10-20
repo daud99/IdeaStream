@@ -9,6 +9,11 @@ Before you begin, ensure you have the following installed on your system:
 - [Docker](https://docs.docker.com/get-docker/)
 - [Python 3.10](https://www.python.org/downloads/)
 
+Also, make sure to install FFMPEG by running
+   ```bash
+        brew install ffmpeg
+   ```
+
 ## Setting Up the Database
 
 To set up the MongoDB database, follow these steps:

@@ -102,73 +102,34 @@ async def connect_to_openai_realtime(ws: WebSocket):
         
         logger.info(f"SESSION SETUP SUCCESSFULLY!")
 
-        # Communication loop
-        while True:
-            try:
-
-                async for response in openai_ws:
-                    res_1=json.loads(response)
-                    print('res1')
-                    print(res_1)
-                    if res_1["type"]=="session.updated":
-                        text_message = {
-                            'event_id':res_1['event_id'],
-                            "type": "conversation.item.create",
-                            "item": {
-                                "type": "message",
-                                "role": "user",
-                                "content": [{"type": "input_text", "text":"what is 5+5"}]
-                                }
+        async for response in openai_ws:
+            res=json.loads(response)
+            print('res')
+            print(res)
+            if res["type"]=="session.updated":
+                text_message = {
+                    'event_id':res['event_id'],
+                    "type": "conversation.item.create",
+                    "item": {
+                        "type": "message",
+                        "role": "user",
+                        "content": [{"type": "input_text", "text":"You will be receiving the audio in the subsequent messages which you have to convert into text that's all"}]
                         }
-                        
-                        print('sending text message')
-                        print(text_message)
-                        print(json.dumps(text_message))
-                        await openai_ws.send(json.dumps(text_message))
+                }
+                
+                print('sending text message')
+                print(text_message)
+                await openai_ws.send(json.dumps(text_message))
             
-                        async for response in openai_ws:
-                            res2=json.loads(response)
-                            print('res2')
-                            print(res2)
-                            if res2['type'] == 'conversation.item.created':
-                                message = {
-                                'event_id': res2['event_id'],
-                                "type": "response.create",
-                                "response": {
-                                "modalities": ["text"],
-                                # "voice": "alloy",
-                                "instructions": "Please assist the user",
-                                # "output_audio_format": "pcm16"
-                                }
-                                }
-                                await openai_ws.send(json.dumps(message))
-                                async for response in openai_ws:
-                                    result = json.loads(response)
-                                    print('result', result)
-
-                # Receive data from the WebSocket as bytes
+            if res["type"]=="conversation.item.created":
+                # Receive data from the WebSocket as bytes from REACT Frontend
                 data = await ws.receive_bytes()
+                send_audio = audio_to_item_create_event(data)
+                print("sending following")
+                print(send_audio)
+                await openai_ws.send(send_audio)
 
-                # Convert received bytes to hex format
-                # hex_data = data.hex()
-
-                # Print the hexadecimal representation
-                # logger.info(f"Received data (hex): {hex_data}")
-                # logging.info("1")
-                # You can also send this back to the client if needed
-                # await ws.send_text(f"Received in hex: {hex_data}")
-
-
-
-
-            except WebSocketDisconnect:
-                openai_connected = False
-                logger.info("Client disconnected")
-                break
-            except Exception as e:
-                logger.error(f"Error receiving data: {e}")
-                break
-
+       
     except websockets.exceptions.ConnectionClosed:
         logger.error("OpenAI WebSocket connection closed")
         await asyncio.sleep(1)  # Wait before retrying
