@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta
-from fastapi import APIRouter, HTTPException, Depends, status, Form
+from datetime import timedelta
+from fastapi import APIRouter, HTTPException, status, Form
 from fastapi.responses import JSONResponse
 from models.user import User
 from misc.utility import hash_password, verify_password, create_access_token
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from core.config import settings
 from pydantic import BaseModel, EmailStr
+from jose import jwt, JWTError
 
 class OAuth2EmailRequestForm(BaseModel):
     email: EmailStr
@@ -66,3 +66,19 @@ async def authenticate_user(email: str, password: str):
     if not verify_password(password, user.password):
         return False
     return user
+
+
+
+
+def decode_access_token(token: str):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        return payload
+    except JWTError:
+        raise credentials_exception
