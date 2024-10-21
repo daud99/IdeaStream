@@ -8,7 +8,7 @@ import uvicorn
 from core.config import settings
 from core.database import init_db
 
-from api.v1 import audio, meeting
+from api.v1 import audio, meeting, user
 
 from models.transcript import Transcript
 
@@ -34,6 +34,7 @@ app.add_middleware(
 # Include audio routes under v1 API version
 app.include_router(audio.router, prefix="/api")
 app.include_router(meeting.router, prefix="/api")
+app.include_router(user.router, prefix="/api")
 
 @app.get("/")
 def read_root():

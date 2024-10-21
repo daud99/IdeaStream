@@ -5,7 +5,6 @@ import io
 import logging
 import websockets
 import pydub
-import time
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from core.config import settings

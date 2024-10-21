@@ -1,11 +1,12 @@
 # models.py
 from beanie import Document
 from datetime import datetime
+from pydantic import Field
 
 class Transcript(Document):
     meeting_id: str
     text: str
-    timestamp: datetime
+    timestamp: datetime = Field(default_factory=datetime.now)
 
     class Settings:
         collection = "transcripts"
