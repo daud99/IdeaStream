@@ -11,6 +11,7 @@ from core.config import settings
 OPENAI_API_KEY = settings.OPENAI_API_KEY
 OPENAI_REALTIME_URL = settings.OPENAI_REALTIME_URL
 
+prompts = 0
 openai_ws = None
 openai_connected = False
 
@@ -49,6 +50,79 @@ async def connect_to_openai():
             logger.error("Error in OpenAI connection: %s", e)
             openai_connected = False
 
+
+def extract_transcript(response):
+    try:
+        # Navigate to the 'content' field where the text or audio transcript is stored
+        content_list = response['response']['output'][0]['content']
+        for content in content_list:
+            # Check for text content with the phrase 'The transcript of the audio is:'
+            if 'type' in content:
+                if content['type'] == 'audio':
+                    if 'transcript' in content:
+                        if 'unable to process audio' in content['transcript'] or "How can I assist you" in content['transcript']:
+                            return ''
+                        elif ':' in content['transcript']:
+                            transcript = content['transcript'].split(':')[1].strip().strip('"')
+                            return transcript
+                        else:
+                            return content['transcript']
+                elif content['type'] == 'text':
+                    if 'text' in content:
+                         if 'unable to process audio' in content['text']or "How can I assist you" in content['text']:
+                            return ''
+                         elif ':' in content['text']:
+                            transcript = content['text'].split(':')[1].strip().strip('"')
+                            return transcript
+                         else:
+                            return content['text']
+        return ''
+    except KeyError:
+        return ''
+
+def extract_titles(response):
+    try:
+        # Navigate to the 'content' field where the text is stored
+        content_list = response['response']['output'][0]['content']
+        for content in content_list:
+            if 'text' in content:
+                text = content['text']
+                
+                # Check if there's a colon to split by
+                if ':' in text:
+                    # Split by the colon, get the part after the colon
+                    _, titles_part = text.split(':', 1)
+                else:
+                    # If no colon, use the whole text
+                    titles_part = text
+                
+                # Split the titles part by newline and filter out any empty strings
+                titles = [title.strip() for title in titles_part.split('\n') if title.strip()]
+                return titles
+        return []
+    except KeyError:
+        return []
+
+async def generate_idea():
+    global openai_ws, openai_connected, prompts
+    await openai_ws.send(json.dumps(
+        {
+            "type": "response.create",
+            "response": {
+                "instructions": "This response is to have an analysis of the transcription so far? What do you think are main TITLES you can derive from discussion in conversation so far the one you have transcripted (converted) from audio to text, you can return those ideas seperated by new line (/n) Make sure title are not more than 5?"
+            }
+        }
+    ))
+    async for response in openai_ws:
+        res = json.loads(response)
+        if res["type"] == "response.done" and res["response"]["status"] != "failed":
+            print(res)
+            titles = extract_titles(res)
+            break
+
+    return titles
+
+
 async def connect_to_openai_realtime(ws: WebSocket):
     """
     Establish a connection with the OpenAI real-time WebSocket API and
@@ -57,7 +131,9 @@ async def connect_to_openai_realtime(ws: WebSocket):
     Args:
         ws (WebSocket): The WebSocket connection from the client.
     """
-    global openai_ws, openai_connected
+    global openai_ws, openai_connected, prompts
+    prompt_no = 3
+    prompt_delta = 2
     try:
         # Ensure a connection to OpenAI is established only once
         await connect_to_openai()    
@@ -83,15 +159,11 @@ async def connect_to_openai_realtime(ws: WebSocket):
         )
         await ws.accept()
         
-        # Create an audio file path for saving received data (optional for debugging)
-        WEBM_FILE_PATH = "/Users/daudahmed/Downloads/audio.webm"
         
-        with open(WEBM_FILE_PATH, 'ab') as audio_file:
-            while True:
+        while True:
                 try:
                     # Receive audio data from the WebSocket as bytes
                     data = await ws.receive_bytes()
-                    audio_file.write(data)  # Optional: Save received audio
 
                     # Encode PCM bytes to base64
                     base64_audio_data = base64.b64encode(data).decode('utf-8')
@@ -125,9 +197,26 @@ async def connect_to_openai_realtime(ws: WebSocket):
                         res = json.loads(response)
                         if res["type"] == "response.done":
                             print('Response received from OpenAI:', res)
-                            await ws.send_text(json.dumps(res))
-                                
+                            text = extract_transcript(res)
+                            if text != '':
+                                await ws.send_text(json.dumps({
+                                    "status": "success",
+                                    "type": "transcription",
+                                    "text": text
+                                })) 
+                                prompts += 1 
                             break
+                    
+                    if prompts == prompt_no:
+                        titles = await generate_idea()
+                        if len(titles) != 0:
+                            await ws.send_text(json.dumps({
+                                "status": "success",
+                                "type": "titles",
+                                "titles": titles
+                            })) 
+                        prompts += prompt_delta
+                    
                         
                 except WebSocketDisconnect:
                     logger.info("Client disconnected")
