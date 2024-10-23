@@ -157,7 +157,7 @@ async def connect_to_openai_realtime(ws: WebSocket):
                 }
             })
         )
-        await ws.accept()
+        # await ws.accept()
         
         
         while True:
