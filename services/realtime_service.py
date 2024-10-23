@@ -103,13 +103,13 @@ def extract_titles(response):
     except KeyError:
         return []
 
-async def generate_idea():
+async def generate_idea(prompt):
     global openai_ws, openai_connected, prompts
     await openai_ws.send(json.dumps(
         {
             "type": "response.create",
             "response": {
-                "instructions": "This response is to have an analysis of the transcription so far? What do you think are main TITLES you can derive from discussion in conversation so far the one you have transcripted (converted) from audio to text, you can return those ideas seperated by new line (/n) Make sure title are not more than 5?"
+                "instructions": prompt
             }
         }
     ))
@@ -208,16 +208,23 @@ async def connect_to_openai_realtime(ws: WebSocket):
                             break
                     
                     if prompts == prompt_no:
-                        titles = await generate_idea()
+                        titles = await generate_idea("This response is to have an analysis of the transcription so far? What do you think are main TITLES you can derive from discussion in conversation so far the one you have transcripted (converted) from audio to text, you can return those ideas seperated by new line (/n) Make sure title are not more than 5?")
                         if len(titles) != 0:
                             await ws.send_text(json.dumps({
                                 "status": "success",
                                 "type": "titles",
                                 "titles": titles
                             })) 
+                        ideas = await generate_idea('This response is to have AI suggestion based on the entire converstion i.e. what ever you have transcripted till now that is converting audio to text. You do not have to transcript here in this response result but generate the "suggestion/key_points related to discussion" of the entire transcription? Try not to do more than 8. Also, seperate them with new line (/n)')
+                        if len(ideas) != 0:
+                            await ws.send_text(json.dumps({
+                                "status": "success",
+                                "type": "ideas",
+                                "ideas": ideas
+                            })) 
                         prompts += prompt_delta
                     
-                        
+                # 'This response is to have a summary of the entire converstion i.e. what ever you have transcripted till now that is converting audio to text. You do not have to transcript here in this response result but generate the "summary" of the entire transcription?'
                 except WebSocketDisconnect:
                     logger.info("Client disconnected")
                     break
