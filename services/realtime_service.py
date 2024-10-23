@@ -84,7 +84,7 @@ async def connect_to_openai_realtime(ws: WebSocket):
         await ws.accept()
         
         # Create an audio file path for saving received data (optional for debugging)
-        WEBM_FILE_PATH = "/Users/umarmukhtar/Downloads/audio.webm"
+        WEBM_FILE_PATH = "/Users/daudahmed/Downloads/audio.webm"
         
         with open(WEBM_FILE_PATH, 'ab') as audio_file:
             while True:
@@ -112,7 +112,14 @@ async def connect_to_openai_realtime(ws: WebSocket):
                     }
 
                     await openai_ws.send(json.dumps(event))
-                    await openai_ws.send(json.dumps({"type": "response.create"}))
+                    await openai_ws.send(json.dumps(
+                        {
+                            "type": "response.create",
+                            "response": {
+                                "instructions": "please transcript the audio"
+                            }
+                        }
+                    ))
 
                     async for response in openai_ws:
                         res = json.loads(response)
