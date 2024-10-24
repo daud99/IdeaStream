@@ -1,102 +1,142 @@
 import json
 import asyncio
-import base64
-import io
+import uuid
+import time
 import os
 import logging
-import websockets
-import pydub
-import tempfile
+import wave
+import io
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-
+from pydub import AudioSegment
 from openai import OpenAI
+
 client = OpenAI()
+
+# Directory to save the audio recordings
+SAVE_DIRECTORY = "recordings"
+os.makedirs(SAVE_DIRECTORY, exist_ok=True)
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-def convert_bytes_to_wavfile(wav_bytes):
+def save_wav_file(wav_bytes, filepath):
+    """Save WAV bytes to a file with proper WAV format"""
     try:
-        # Load WebM audio and convert to PCM16
-        fname = "audio.wav"
-        buffer = io.BytesIO(wav_bytes)
-        buffer.name = fname
-        audio = pydub.AudioSegment.from_file(buffer, format='wav')
-        audio.export(buffer, format="wav")
-        return buffer
+        # Default WAV parameters if header reading fails
+        channels = 1  # mono
+        sample_width = 2  # 16-bit
+        framerate = 16000  # 16kHz
+        
+        # First try to read the WAV header
+        try:
+            with io.BytesIO(wav_bytes) as wav_buffer:
+                with wave.open(wav_buffer, 'rb') as wav_read:
+                    channels = wav_read.getnchannels()
+                    sample_width = wav_read.getsampwidth()
+                    framerate = wav_read.getframerate()
+                    frames = wav_read.readframes(wav_read.getnframes())
+        except Exception as e:
+            logger.warning(f"Could not read WAV header, using default values: {e}")
+            # If we can't read the header, assume the bytes are raw PCM data
+            frames = wav_bytes[44:]  # Skip the 44-byte WAV header
+        
+        # Create a new WAV file with the parameters
+        with wave.open(filepath, 'wb') as wav_file:
+            wav_file.setnchannels(channels)
+            wav_file.setsampwidth(sample_width)
+            wav_file.setframerate(framerate)
+            wav_file.writeframes(frames if isinstance(frames, bytes) else wav_bytes[44:])
+        
+        # Verify the file was created and is valid
+        if os.path.exists(filepath) and os.path.getsize(filepath) > 44:  # 44 is minimum WAV header size
+            return True
+            
+        return False
     except Exception as e:
-        logger.error(f"Error converting WebM to PCM: {e}")
-        raise
+        logger.error(f"Error saving WAV file: {e}")
+        return False
 
-def convert_to_mono_wav(input_path):
+def convert_to_whisper_format(input_path):
+    """Convert audio to format compatible with Whisper API"""
     try:
-        # Load audio file with pydub
-        audio = pydub.AudioSegment.from_file(input_path)
+        # Load the audio file
+        audio = AudioSegment.from_wav(input_path)
         
-        # Convert to mono and 16kHz
-        audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)  # 16-bit PCM
+        # Convert to required format: mono, 16kHz, 16-bit PCM
+        audio = audio.set_frame_rate(16000).set_channels(1).set_sample_width(2)
         
-        # Save the converted file
-        output_path = input_path.replace(".wav", "_converted.wav")
+        output_path = input_path.replace(".wav", "_whisper.wav")
         audio.export(output_path, format="wav")
         
-        return output_path
+        # Verify the converted file
+        if os.path.exists(output_path) and os.path.getsize(output_path) > 44:
+            return output_path
+            
+        return None
     except Exception as e:
-        print(f"Error converting audio: {e}")
+        logger.error(f"Error converting audio: {e}")
         return None
 
-# Modify transcribe function to convert the file before sending to Whisper
 def transcribe(audio_file_path):
-    converted_file_path = convert_to_mono_wav(audio_file_path)
-    if not converted_file_path:
-        raise Exception("Error converting the audio file.")
-    
-    with open(converted_file_path, "rb") as audio_file:
-        transcription = client.audio.transcriptions.create(
-            model="whisper-1", 
-            file=audio_file
-        )
-    
-    # Clean up converted file
-    os.remove(converted_file_path)
-
-    return transcription.text
-
-# Real-time transcription using Whisper
-async def realtime_transcription_using_whisper(ws: WebSocket):
-    global client
-
+    """Transcribe audio using Whisper API"""
     try:
-        await ws.accept()   
+        # Convert audio to Whisper-compatible format
+        converted_file_path = convert_to_whisper_format(audio_file_path)
+        if not converted_file_path:
+            raise Exception("Error converting the audio file.")
+        
+        # Transcribe using Whisper API
+        with open(converted_file_path, "rb") as audio_file:
+            transcription = client.audio.transcriptions.create(
+                model="whisper-1", 
+                file=audio_file
+            )
+        
+        # Clean up converted file
+        os.remove(converted_file_path)
+        
+        return transcription.text
+    except Exception as e:
+        logger.error(f"Transcription error: {e}")
+        return None
+
+async def realtime_transcription_using_whisper(ws: WebSocket):
+    try:
         while True:
             try:
-                # Receive audio data from the WebSocket as bytes
+                # Receive audio data
                 data = await ws.receive_bytes()
-
-                # Save the audio data to a temporary file
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as temp_audio_file:
-                    temp_audio_file.write(data)
-                    temp_audio_file.flush()
-                    temp_audio_path = temp_audio_file.name
-
-                # Send the file to Whisper API for transcription
-                res = transcribe(temp_audio_path)
-
-                # Send the transcription result back to the WebSocket client
-                await ws.send_text(json.dumps(res))
                 
-                # Clean up the temporary file
-                os.remove(temp_audio_path)
-                                            
+                # Log the size of received data
+                logger.info(f"Received audio data size: {len(data)} bytes")
+                
+                # Generate unique filename
+                unique_filename = f"{uuid.uuid4()}_{int(time.time())}.wav"
+                saved_audio_path = os.path.join(SAVE_DIRECTORY, unique_filename)
+                
+                # Save the WAV file
+                if save_wav_file(data, saved_audio_path):
+                    logger.info(f"Successfully saved WAV file: {saved_audio_path}")
+                    
+                    # Transcribe the audio
+                    # transcription = transcribe(saved_audio_path)
+                    # if transcription:
+                    #     await ws.send_text(json.dumps({"transcription": transcription}))
+                    #     logger.info(f"Transcription completed: {transcription}")
+                    
+                    # Optionally remove the original file if you don't want to keep it
+                    # os.remove(saved_audio_path)
+                else:
+                    logger.error("Failed to save WAV file")
+                    await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
+                    
             except WebSocketDisconnect:
                 logger.info("Client disconnected")
                 break
             except Exception as e:
-                logger.error(f"Error receiving data: {e}")
-                break
-    except websockets.exceptions.ConnectionClosed:
-        logger.error("WebSocket connection closed")
+                logger.error(f"Error processing audio: {e}")
+                await ws.send_text(json.dumps({"error": str(e)}))
+                
     except Exception as e:
-        logger.error(f"Error in connection: {e}")
-
+        logger.error(f"Connection error: {e}")

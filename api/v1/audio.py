@@ -4,6 +4,7 @@ from jose import JWTError
 from models.user import User
 from misc.utility import decode_access_token
 from services.realtime_service import connect_to_openai_realtime
+from services.wisper_service import realtime_transcription_using_whisper
 
 router = APIRouter()
 
@@ -46,8 +47,8 @@ async def websocket_endpoint(websocket: WebSocket):
 
     # Proceed with your service logic
     try:
-        await connect_to_openai_realtime(websocket)
+        # await connect_to_openai_realtime(websocket)
         # Optionally handle real-time transcription
-        # await realtime_transcription_using_whisper(websocket)
+        await realtime_transcription_using_whisper(websocket)
     except WebSocketDisconnect:
         print(f"Client {user.email} disconnected")
