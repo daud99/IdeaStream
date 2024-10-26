@@ -18,8 +18,6 @@ os.makedirs(SAVE_DIRECTORY, exist_ok=True)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-complete_transcription = None
-
 def save_wav_file(wav_bytes, filepath):
     """Save WAV bytes to a file with proper WAV format"""
     try:
@@ -28,28 +26,16 @@ def save_wav_file(wav_bytes, filepath):
         sample_width = 2  # 16-bit
         framerate = 16000  # 16kHz
         
-        # First try to read the WAV header
-        try:
-            with io.BytesIO(wav_bytes) as wav_buffer:
-                with wave.open(wav_buffer, 'rb') as wav_read:
-                    channels = wav_read.getnchannels()
-                    sample_width = wav_read.getsampwidth()
-                    framerate = wav_read.getframerate()
-                    frames = wav_read.readframes(wav_read.getnframes())
-        except Exception as e:
-            logger.warning(f"Could not read WAV header, using default values: {e}")
-            # If we can't read the header, assume the bytes are raw PCM data
-            frames = wav_bytes[44:]  # Skip the 44-byte WAV header
         
         # Create a new WAV file with the parameters
         with wave.open(filepath, 'wb') as wav_file:
             wav_file.setnchannels(channels)
             wav_file.setsampwidth(sample_width)
             wav_file.setframerate(framerate)
-            wav_file.writeframes(frames if isinstance(frames, bytes) else wav_bytes[44:])
+            wav_file.writeframes(wav_bytes)
         
         # Verify the file was created and is valid
-        if os.path.exists(filepath) and os.path.getsize(filepath) > 44:  # 44 is minimum WAV header size
+        if os.path.exists(filepath): 
             return True
             
         return False
@@ -69,8 +55,6 @@ def transcribe(audio_file_path):
     except Exception as e:
         logger.error(f"Transcription error: {e}")
         return None
-
-import json
 
 def perform_analysis(transcription):
     # Call OpenAI API for completion
@@ -131,8 +115,9 @@ def perform_analysis(transcription):
 
 async def realtime_transcription_using_whisper(ws: WebSocket):
     try:
+        complete_transcription = ''
         t = 0
-        delta = 5
+        delta = 3
         while True:
             try:
                 # Receive audio data
@@ -152,12 +137,9 @@ async def realtime_transcription_using_whisper(ws: WebSocket):
                     # Transcribe the audio
                     transcription = transcribe(saved_audio_path)
                     if transcription:
-                        await ws.send_text( await ws.send_text(json.dumps({
-                                    "status": "success",
-                                    "type": "transcription",
-                                    "text": transcription
-                                })) )
+                        await ws.send_text(json.dumps({"status": "success","type": "transcription", "text": transcription}))
                         logger.info(f"Transcription completed: {transcription}")
+                        complete_transcription += transcription
                         t+=1
                     # Remove the saved audio file after transcription
                     os.remove(saved_audio_path)
@@ -167,12 +149,16 @@ async def realtime_transcription_using_whisper(ws: WebSocket):
                     await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
                     
                 if t == delta:
+                    print('complete_transcription')
+                    print(complete_transcription)
                     output = perform_analysis(complete_transcription)
-                    await ws.send_text( await ws.send_text(json.dumps({
+                    print('output')
+                    print(output)
+                    await ws.send_text(json.dumps({
                                     "status": "success",
                                     "type": "analysis",
-                                    "text": output
-                    })) )
+                                    "output": output
+                    }))
                     delta += delta
             except WebSocketDisconnect:
                 logger.info("Client disconnected")
