@@ -65,7 +65,7 @@ def perform_analysis(transcription):
             {
                 "role": "user",
                 "content": f'''
-                You need to generate the titles and respective ideas based on the following transcription:
+                You need to generate the titles and respective ideas and also make sure to categorize each ideas based on the following transcription:
                 \"\"\" 
                 {transcription}
                 \"\"\"
@@ -75,12 +75,14 @@ def perform_analysis(transcription):
                     {{
                         "title": "Title 1",
                         "idea": "Idea 1",
-                        "idea": "Idea 2"
+                        "idea": "Idea 2",
+                        "category": "Category 2"
                     }},
                     {{
                         "title": "Title 2",
                         "idea": "Idea 1",
-                        "idea": "Idea 2"
+                        "idea": "Idea 2",
+                        "category": "Category 2"
                     }}
                   ],
                   "suggestions": [
