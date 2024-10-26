@@ -4,9 +4,9 @@ import time
 import os
 import logging
 import wave
-import io
 from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
+from services.connections import connected_clients
 
 client = OpenAI()
 
@@ -94,8 +94,6 @@ def perform_analysis(transcription):
         ]
     )
 
-    print('completion:')
-    print(completion)
     # Access the content attribute correctly from the completion object
     response_text = completion.choices[0].message.content
 
@@ -113,35 +111,38 @@ def perform_analysis(transcription):
     return response_json
 
 
-async def realtime_transcription_using_whisper(ws: WebSocket):
+async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
     try:
         complete_transcription = ''
         t = 0
         delta = 3
         while True:
             try:
-                # Receive audio data
                 data = await ws.receive_bytes()
-                
-                # Log the size of received data
                 logger.info(f"Received audio data size: {len(data)} bytes")
                 
-                # Generate unique filename
                 unique_filename = f"{uuid.uuid4()}_{int(time.time())}.wav"
                 saved_audio_path = os.path.join(SAVE_DIRECTORY, unique_filename)
                 
-                # Save the WAV file
                 if save_wav_file(data, saved_audio_path):
                     logger.info(f"Successfully saved WAV file: {saved_audio_path}")
                     
-                    # Transcribe the audio
                     transcription = transcribe(saved_audio_path)
                     if transcription:
-                        await ws.send_text(json.dumps({"status": "success","type": "transcription", "text": transcription}))
+                        message = {
+                            "status": "success",
+                            "type": "transcription",
+                            "text": transcription,
+                            "user": username
+                        }
+                        
+                        for client in connected_clients:
+                            await client["websocket"].send_text(json.dumps(message))
+                        
                         logger.info(f"Transcription completed: {transcription}")
                         complete_transcription += transcription
-                        t+=1
-                    # Remove the saved audio file after transcription
+                        t += 1
+                    
                     os.remove(saved_audio_path)
                     logger.info(f"Deleted audio file: {saved_audio_path}")
                 else:
@@ -149,16 +150,16 @@ async def realtime_transcription_using_whisper(ws: WebSocket):
                     await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
                     
                 if t == delta:
-                    print('complete_transcription')
-                    print(complete_transcription)
                     output = perform_analysis(complete_transcription)
-                    print('output')
-                    print(output)
-                    await ws.send_text(json.dumps({
-                                    "status": "success",
-                                    "type": "analysis",
-                                    "output": output
-                    }))
+                    analysis_message = {
+                        "status": "success",
+                        "type": "analysis",
+                        "output": output
+                    }
+                    
+                    for client in connected_clients:
+                        await client["websocket"].send_text(json.dumps(analysis_message))
+                    
                     delta += delta
             except WebSocketDisconnect:
                 logger.info("Client disconnected")

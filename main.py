@@ -26,7 +26,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000","http://localhost:3001"],  # Add your React app's URL
+    allow_origins=["http://localhost:3000","http://localhost:3001","http://192.168.1.6:3001","https://9f8e-58-65-217-21.ngrok-free.app","http://9f8e-58-65-217-21.ngrok-free.app"],  # Add your React app's URL
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
