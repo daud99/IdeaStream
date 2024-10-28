@@ -57,6 +57,23 @@ async def login(email: str = Form(...), password: str = Form(...)):
 
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.get("/token/verify", response_model=dict)
+async def verify_token(token: str):
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_email: str = payload.get("sub")
+        if user_email is None:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+        return {"message": "Token is valid", "user_email": user_email}
+    
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
 
 # HELPERS
 async def authenticate_user(email: str, password: str):
