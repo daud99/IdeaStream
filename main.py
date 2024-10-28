@@ -8,7 +8,7 @@ import uvicorn
 from core.config import settings
 from core.database import init_db
 
-from api.v1 import audio, meeting, user
+from api.v1 import audio, meeting, user, file
 
 from models.transcript import Transcript
 
@@ -35,24 +35,11 @@ app.add_middleware(
 app.include_router(audio.router, prefix="/api")
 app.include_router(meeting.router, prefix="/api")
 app.include_router(user.router, prefix="/api")
+app.include_router(file.router, prefix="/api")
 
 @app.get("/")
 def read_root():
     return {"message": f"Welcome to {settings.PROJECT_NAME}!"}
-
-# Endpoint to insert a dummy document into the transcripts collection
-@app.get("/insert-dummy")
-async def insert_dummy():
-    # Create a dummy transcript document
-    dummy_transcript = Transcript(
-        meeting_id="dummy_meeting_001",
-        text="This is a dummy transcript for testing purposes.",
-        timestamp=datetime.utcnow()
-    )
-    # Insert the document into the database
-    await dummy_transcript.insert()
-    # Return the inserted document
-    return dummy_transcript
 
 if __name__ == "__main__":
     uvicorn.run(
