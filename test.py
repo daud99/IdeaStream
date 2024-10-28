@@ -1,67 +1,45 @@
 import json
 from openai import OpenAI
 client = OpenAI()
-
-import json
-
-def perform_analysis(transcription):
-    # Call OpenAI API for completion
-    completion = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
-            {"role": "system", "content": "You are a helpful assistant."},
-            {
-                "role": "user",
-                "content": f'''
-                You need to generate the titles and respective ideas based on the following transcription:
-                \"\"\" 
-                {transcription}
-                \"\"\"
-                The result should strictly be in the following JSON format without any extra explanation, text, or comments:
-                {{
-                  "titles": [
-                    {{
-                        "title": "Title 1",
-                        "idea": "Idea 1",
-                        "idea": "Idea 2"
-                    }},
-                    {{
-                        "title": "Title 2",
-                        "idea": "Idea 1",
-                        "idea": "Idea 2"
-                    }}
-                  ],
-                  "suggestions": [
-                     "Suggestion 1"
-                     "Suggestion 2"
-                  ]
-                }}
-                Ensure the output is valid JSON and contains only the list structure provided.
-                '''
-            }
-        ]
-    )
-
-    print('completion:')
-    print(completion)
-    # Access the content attribute correctly from the completion object
-    response_text = completion.choices[0].message.content
-
-    # Clean up the response text to extract valid JSON
-    response_text = response_text.strip()  # Remove leading/trailing whitespace
-    if response_text.startswith('```json') and response_text.endswith('```'):
-        response_text = response_text[8:-3].strip()  # Remove the code block markers
-
-    # Convert the response to a JSON object
-    try:
-        response_json = json.loads(response_text)
-    except json.JSONDecodeError:
-        response_json = {"error": "Invalid JSON format in response"}
-
-    return response_json
+from sentence_transformers import SentenceTransformer
+from langchain.document_loaders import PyMuPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import numpy as np
+import faiss
 
 
+# Load SentenceTransformer model
+model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
-# print(perform_analysis("Today, we are discussing the future of artificial intelligence in healthcare. AI is expected to revolutionize the industry by improving diagnosis accuracy, optimizing treatment plans, and automating administrative tasks. There are still challenges to overcome, such as data privacy concerns, bias in algorithms, and integration with existing healthcare systems."))
+# Define the path to the PDF file
+pdf_file_path = "documents/35.pdf"
 
-print(perform_analysis('```json\n{\n  "titles": [\n    {\n        "title": "Revolutionizing Healthcare with AI",\n        "idea": "AI improves diagnosis accuracy",\n        "idea": "Optimizing treatment plans with AI"\n    },\n    {\n        "title": "Challenges and Opportunities for AI in Healthcare",\n        "idea": "Addressing data privacy concerns",\n        "idea": "Integrating AI with existing systems"\n    }\n  ],\n  "suggestions": [\n    {\n        "suggestion": "Implement rigorous data privacy standards"\n    },\n    {\n        "suggestion": "Develop unbiased AI algorithms"\n    }\n  ]\n}\n```'))
+# Load the PDF document
+loader = PyMuPDFLoader(pdf_file_path)
+documents = loader.load()
+
+# Use RecursiveCharacterTextSplitter with custom separators
+text_splitter = RecursiveCharacterTextSplitter(
+    chunk_size=1000,
+    chunk_overlap=100,
+    separators=["\n\n", "\n", " "]
+)
+
+# Split text into logical chunks
+chunks = text_splitter.split_documents(documents)
+
+# Perform embedding on each chunk
+embeddings = [model.encode(chunk.page_content) for chunk in chunks]
+
+# Initialize FAISS index
+dimension = len(embeddings[0])
+index = faiss.IndexFlatL2(dimension)  # Using L2 distance for similarity
+
+# Convert embeddings list to a numpy array and add to the FAISS index
+embedding_matrix = np.array(embeddings).astype('float32')
+index.add(embedding_matrix)
+
+# Save the index (optional)
+faiss.write_index(index, "vector_index.faiss")
+
+print(f"Stored {len(embeddings)} embeddings in the vector database.")

@@ -6,3 +6,8 @@ beanie==1.27.0
 pydub==0.25.1
 python-jose 
 passlib[bcrypt]
+langchain
+langchain-community
+pymupdf
+sentence-transformers
+faiss-cpu
