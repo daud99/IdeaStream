@@ -5,7 +5,7 @@ from models.user import User
 from misc.utility import decode_access_token
 from services.realtime_service import connect_to_openai_realtime
 from services.wisper_service import realtime_transcription_using_whisper
-from services.connections import connected_clients
+from services.common import connected_clients
 # rest of your imports and code in AUDIO.py remain the same
 
 router = APIRouter()

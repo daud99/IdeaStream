@@ -6,7 +6,8 @@ import logging
 import wave
 from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
-from services.connections import connected_clients
+from services.common import connected_clients
+from services.fais import query_faiss_index
 
 client = OpenAI()
 
@@ -57,16 +58,26 @@ def transcribe(audio_file_path):
         return None
 
 def perform_analysis(transcription):
-    # Call OpenAI API for completion
-    completion = client.chat.completions.create(
-        model="gpt-4o",
-        messages=[
+
+    logger.info("BEGIN analysis on the transcription")
+    # Retrieve relevant chunks using the transcription
+    relevant_chunks = query_faiss_index(transcription)  # Assume this returns a list of relevant chunks
+    
+
+    # Combine the relevant chunks with the transcription for context
+    context = "\n".join(relevant_chunks)  # Joining relevant chunks into a single string
+    
+    prompt = [
             {"role": "system", "content": "You are a helpful assistant."},
             {
                 "role": "user",
                 "content": f'''
-                You need to generate the titles and respective ideas and also make sure to categorize each ideas based on the following transcription:
-                \"\"\" 
+                You need to generate the titles and respective ideas, and also make sure to categorize each idea based on the following context and transcription:
+                \"\"\"
+                Context:
+                {context}
+
+                Transcription:
                 {transcription}
                 \"\"\"
                 The result should strictly be in the following JSON format without any extra explanation, text, or comments:
@@ -74,19 +85,17 @@ def perform_analysis(transcription):
                   "titles": [
                     {{
                         "title": "Title 1",
-                        "idea": "Idea 1",
-                        "idea": "Idea 2",
-                        "category": "Category 2"
+                        "ideas": ["Idea 1", "Idea 2"],
+                        "category": "Category 1"
                     }},
                     {{
                         "title": "Title 2",
-                        "idea": "Idea 1",
-                        "idea": "Idea 2",
+                        "ideas": ["Idea 1", "Idea 2"],
                         "category": "Category 2"
                     }}
                   ],
                   "suggestions": [
-                     "Suggestion 1"
+                     "Suggestion 1",
                      "Suggestion 2"
                   ]
                 }}
@@ -94,6 +103,13 @@ def perform_analysis(transcription):
                 '''
             }
         ]
+    
+    print('final prompt is as follow:')
+    print(prompt)
+    # Call OpenAI API for completion
+    completion = client.chat.completions.create(
+        model="gpt-4o",
+        messages=prompt
     )
 
     # Access the content attribute correctly from the completion object
@@ -111,7 +127,6 @@ def perform_analysis(transcription):
         response_json = {"error": "Invalid JSON format in response"}
 
     return response_json
-
 
 async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
     try:
@@ -169,6 +184,7 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
             except Exception as e:
                 logger.error(f"Error processing audio: {e}")
                 await ws.send_text(json.dumps({"error": str(e)}))
-                
+                break
     except Exception as e:
         logger.error(f"Connection error: {e}")
+        
