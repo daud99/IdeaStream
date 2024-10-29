@@ -20,4 +20,3 @@ async def create_meeting(meeting: Meeting, current_user: User = Depends(get_curr
         "meetingId": str(meeting.id), 
         "name": current_user.first_name
     })
-    # return f"Hello, {current_user.first_name} with {meeting.id}!"

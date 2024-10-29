@@ -1,3 +1,4 @@
+import base64
 import json
 import uuid
 import time
@@ -135,37 +136,55 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
         delta = 3
         while True:
             try:
-                data = await ws.receive_bytes()
-                logger.info(f"Received audio data size: {len(data)} bytes")
+                # Receive JSON data
+                data = await ws.receive_text()
+                message = json.loads(data)
+
+                # Extract meeting ID, type, and audio data array
+                meeting_id = message.get("meetingID")
+                audio_type = message.get("type")
+                audio_base64 = message.get("data")  # This is now an array of integers
+
+                if audio_type == "audio" and audio_base64:
+                    # Decode base64 audio data back to bytes
+                    try:
+                        wav_data = base64.b64decode(audio_base64)
+                    except base64.binascii.Error as e:
+                        logger.error(f"Failed to decode base64 audio data: {e}")
+                        await ws.send_text(json.dumps({"error": "Invalid base64 audio data"}))
+                        continue
+
+                    unique_filename = f"{uuid.uuid4()}_{int(time.time())}.wav"
+                    saved_audio_path = os.path.join(SAVE_DIRECTORY, unique_filename)
+
+                    # Save WAV file
+                    if save_wav_file(wav_data, saved_audio_path):
+                        logger.info(f"Successfully saved WAV file: {saved_audio_path}")
+
+                        # Transcription
+                        transcription = transcribe(saved_audio_path)
+                        if transcription:
+                            message = {
+                                "status": "success",
+                                "type": "transcription",
+                                "text": transcription,
+                                "user": username
+                            }
+
+                            for client in connected_clients:
+                                await client["websocket"].send_text(json.dumps(message))
+
+                            logger.info(f"Transcription completed: {transcription}")
+                            complete_transcription += transcription
+                            t += 1
+
+                        os.remove(saved_audio_path)
+                        logger.info(f"Deleted audio file: {saved_audio_path}")
+                    else:
+                        logger.error("Failed to save WAV file")
+                        await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
                 
-                unique_filename = f"{uuid.uuid4()}_{int(time.time())}.wav"
-                saved_audio_path = os.path.join(SAVE_DIRECTORY, unique_filename)
-                
-                if save_wav_file(data, saved_audio_path):
-                    logger.info(f"Successfully saved WAV file: {saved_audio_path}")
-                    
-                    transcription = transcribe(saved_audio_path)
-                    if transcription:
-                        message = {
-                            "status": "success",
-                            "type": "transcription",
-                            "text": transcription,
-                            "user": username
-                        }
-                        
-                        for client in connected_clients:
-                            await client["websocket"].send_text(json.dumps(message))
-                        
-                        logger.info(f"Transcription completed: {transcription}")
-                        complete_transcription += transcription
-                        t += 1
-                    
-                    os.remove(saved_audio_path)
-                    logger.info(f"Deleted audio file: {saved_audio_path}")
-                else:
-                    logger.error("Failed to save WAV file")
-                    await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
-                    
+                # Perform periodic analysis
                 if t == delta:
                     output = perform_analysis(complete_transcription)
                     analysis_message = {
@@ -173,11 +192,12 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                         "type": "analysis",
                         "output": output
                     }
-                    
+
                     for client in connected_clients:
                         await client["websocket"].send_text(json.dumps(analysis_message))
-                    
+
                     delta += delta
+
             except WebSocketDisconnect:
                 logger.info("Client disconnected")
                 break
