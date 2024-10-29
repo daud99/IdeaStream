@@ -8,7 +8,7 @@ import wave
 from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
 from services.common import connected_clients
-from services.fais import query_faiss_index
+from services.fais import query_faiss_index, delete_faiss_index
 
 client = OpenAI()
 
@@ -141,7 +141,7 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                 message = json.loads(data)
 
                 # Extract meeting ID, type, and audio data array
-                meeting_id = message.get("meetingID")
+                meeting_id = message.get("meetingId")
                 audio_type = message.get("type")
                 audio_base64 = message.get("data")  # This is now an array of integers
 
@@ -183,6 +183,9 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                     else:
                         logger.error("Failed to save WAV file")
                         await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
+                elif audio_type == "end_meeting":
+                    delete_faiss_index(os.path.join("indices", f"{meeting_id}.faiss"))
+                    break
                 
                 # Perform periodic analysis
                 if t == delta:

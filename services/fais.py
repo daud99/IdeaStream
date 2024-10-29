@@ -6,11 +6,8 @@ import numpy as np
 import faiss
 
 INDEX_DIRECTORY = "indices"
-INDEX_NAME = "vector_index.faiss"
-
 os.makedirs(INDEX_DIRECTORY, exist_ok=True)
 
-INDEX_PATH = os.path.join(INDEX_DIRECTORY, INDEX_NAME)
 # Load SentenceTransformer model
 model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 
@@ -18,7 +15,7 @@ model = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
 chunks = []
 index = None  # Initialize index as a global variable
 
-def process_and_index_pdf(file_path: str):
+def process_and_index_pdf(file_path: str, meeting_id: str):
     global chunks, index  # Indicate that we are using the global variables
     
     # Load and split the PDF document into chunks
@@ -41,9 +38,10 @@ def process_and_index_pdf(file_path: str):
     embeddings = [model.encode(chunk.page_content).astype('float32') for chunk in document_chunks]
     embedding_matrix = np.array(embeddings)
 
+    index_path = os.path.join(INDEX_DIRECTORY, f"{meeting_id}.faiss")
     # Load or create FAISS index
-    if os.path.exists(INDEX_PATH):
-        index = faiss.read_index(INDEX_PATH)
+    if os.path.exists(index_path):
+        index = faiss.read_index(index_path)
     else:
         dimension = embedding_matrix.shape[1]
         index = faiss.IndexFlatL2(dimension)
@@ -52,7 +50,7 @@ def process_and_index_pdf(file_path: str):
     index.add(embedding_matrix)
     
     # Save the updated index
-    faiss.write_index(index, INDEX_PATH)
+    faiss.write_index(index, index_path)
     print(f"Processed and indexed document: {file_path}")
 
 def query_faiss_index(transcription, k=5):
@@ -71,3 +69,14 @@ def query_faiss_index(transcription, k=5):
     # Step 3: Retrieve relevant chunks based on indices
     relevant_chunks = [chunks[i] for i in indices[0]]  # Assuming chunks holds the original text or context
     return relevant_chunks
+
+def delete_faiss_index(index_path="indices/vector_index.faiss"):
+    """Deletes the FAISS index file if it exists."""
+    try:
+        if os.path.exists(index_path):
+            os.remove(index_path)
+            print(f"Successfully deleted the FAISS index at {index_path}.")
+        else:
+            print(f"No FAISS index found at {index_path}.")
+    except Exception as e:
+        print(f"Error while deleting FAISS index: {str(e)}")
