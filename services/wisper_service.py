@@ -129,6 +129,67 @@ def perform_analysis(transcription):
 
     return response_json
 
+def generate_structured_summary(transcription):
+    logger.info("BEGIN structured summary generation on the transcription")
+
+    # Retrieve relevant chunks using the transcription, if needed
+    relevant_chunks = query_faiss_index(transcription)
+
+    # Combine relevant chunks with the transcription for context
+    context = "\n".join(relevant_chunks)
+
+    # Define the structured prompt for generating the summary
+    prompt = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {
+            "role": "user",
+            "content": f'''
+            Generate a structured summary for the following context and transcription in the format below:
+            \"\"\"
+            Context:
+            {context}
+
+            Transcription:
+            {transcription}
+            \"\"\"
+            The result should be in JSON format as shown:
+            {{
+                "key_outcomes": ["Key outcome 1", "Key outcome 2"],
+                "decisions_made": ["Decision 1", "Decision 2"],
+                "action_items": ["Action item 1", "Action item 2"],
+                "overview": "A brief overview of the meeting's main topics.",
+                "important_takeaways": ["Takeaway 1", "Takeaway 2"]
+            }}
+            '''
+        }
+    ]
+    
+    # Call OpenAI API for completion
+    completion = client.chat.completions.create(
+        model="gpt-4o",
+        messages=prompt
+    )
+
+    # Access the content attribute correctly from the completion object
+    response_text = completion.choices[0].message.content
+
+    print('response_text for summary is as follow:')
+    print(response_text)
+
+    # Clean up the response text to extract valid JSON
+    response_text = response_text.strip()  # Remove leading/trailing whitespace
+    if response_text.startswith('```json') and response_text.endswith('```'):
+        response_text = response_text[8:-3].strip()  # Remove the code block markers
+
+    # Convert response to JSON for easier frontend display
+    try:
+        response_json = json.loads(response_text)
+    except json.JSONDecodeError:
+        response_json = {"error": "Invalid JSON format in response"}
+    print('sending')
+    print(response_json)
+    return response_json
+
 async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
     try:
         complete_transcription = ''
@@ -142,10 +203,10 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
 
                 # Extract meeting ID, type, and audio data array
                 meeting_id = message.get("meetingId")
-                audio_type = message.get("type")
+                type = message.get("type")
                 audio_base64 = message.get("data")  # This is now an array of integers
 
-                if audio_type == "audio" and audio_base64:
+                if type == "audio" and audio_base64:
                     # Decode base64 audio data back to bytes
                     try:
                         wav_data = base64.b64decode(audio_base64)
@@ -183,9 +244,19 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                     else:
                         logger.error("Failed to save WAV file")
                         await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
-                elif audio_type == "end_meeting":
+                elif type == "end_meeting":
                     delete_faiss_index(os.path.join("indices", f"{meeting_id}.faiss"))
                     break
+                elif type == "generate_summary":
+                    output = generate_structured_summary(complete_transcription)
+                    summary_message = {
+                        "status": "success",
+                        "type": "summary",
+                        "output": output
+                    }
+
+                    for client in connected_clients:
+                        await client["websocket"].send_text(json.dumps(summary_message))
                 
                 # Perform periodic analysis
                 if t == delta:
