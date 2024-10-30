@@ -1,5 +1,5 @@
 from typing import List, Dict
 from fastapi import WebSocket
 
-# List to store active WebSocket connections and their usernames
-connected_clients: List[Dict[str, WebSocket]] = []
+# Dictionary to store WebSocket connections per meeting ID
+meetings = {}  # Example structure: {meeting_id: [{"websocket": ws, "username": user_name}]}

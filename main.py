@@ -30,7 +30,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 # Include audio routes under v1 API version
-app.include_router(audio.router, prefix="/api")
+app.include_router(audio.router, prefix="/ws")
 app.include_router(meeting.router, prefix="/api")
 app.include_router(user.router, prefix="/api")
 app.include_router(file.router, prefix="/api")

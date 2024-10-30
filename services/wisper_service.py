@@ -7,8 +7,8 @@ import logging
 import wave
 from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
-from services.common import connected_clients
 from services.fais import query_faiss_index, delete_faiss_index
+from services.common import meetings  # Import shared `meetings` dictionary
 
 client = OpenAI()
 
@@ -23,24 +23,17 @@ logger = logging.getLogger(__name__)
 def save_wav_file(wav_bytes, filepath):
     """Save WAV bytes to a file with proper WAV format"""
     try:
-        # Default WAV parameters if header reading fails
         channels = 1  # mono
         sample_width = 2  # 16-bit
         framerate = 16000  # 16kHz
         
-        
-        # Create a new WAV file with the parameters
         with wave.open(filepath, 'wb') as wav_file:
             wav_file.setnchannels(channels)
             wav_file.setsampwidth(sample_width)
             wav_file.setframerate(framerate)
             wav_file.writeframes(wav_bytes)
         
-        # Verify the file was created and is valid
-        if os.path.exists(filepath): 
-            return True
-            
-        return False
+        return os.path.exists(filepath)
     except Exception as e:
         logger.error(f"Error saving WAV file: {e}")
         return False
@@ -48,26 +41,20 @@ def save_wav_file(wav_bytes, filepath):
 def transcribe(audio_file_path):
     """Transcribe audio using Whisper API"""
     try:
-        audio_file= open(audio_file_path, "rb")
-        transcription = client.audio.translations.create(
-            model="whisper-1", 
-            file=audio_file
-        )        
+        with open(audio_file_path, "rb") as audio_file:
+            transcription = client.audio.translations.create(
+                model="whisper-1", 
+                file=audio_file
+            )        
         return transcription.text
     except Exception as e:
         logger.error(f"Transcription error: {e}")
         return None
 
 def perform_analysis(transcription):
-
     logger.info("BEGIN analysis on the transcription")
-    # Retrieve relevant chunks using the transcription
-    relevant_chunks = query_faiss_index(transcription)  # Assume this returns a list of relevant chunks
-    
-
-    # Combine the relevant chunks with the transcription for context
-    context = "\n".join(relevant_chunks)  # Joining relevant chunks into a single string
-    
+    relevant_chunks = query_faiss_index(transcription)
+    context = "\n".join(relevant_chunks)
     prompt = [
             {"role": "system", "content": "You are a helpful assistant."},
             {
@@ -131,14 +118,8 @@ def perform_analysis(transcription):
 
 def generate_structured_summary(transcription):
     logger.info("BEGIN structured summary generation on the transcription")
-
-    # Retrieve relevant chunks using the transcription, if needed
     relevant_chunks = query_faiss_index(transcription)
-
-    # Combine relevant chunks with the transcription for context
     context = "\n".join(relevant_chunks)
-
-    # Define the structured prompt for generating the summary
     prompt = [
         {"role": "system", "content": "You are a helpful assistant."},
         {
@@ -190,39 +171,32 @@ def generate_structured_summary(transcription):
     print(response_json)
     return response_json
 
-async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
+async def realtime_transcription_using_whisper(ws: WebSocket, username: str, meetingId: str):
     try:
         complete_transcription = ''
         t = 0
         delta = 3
         while True:
             try:
-                # Receive JSON data
                 data = await ws.receive_text()
                 message = json.loads(data)
 
-                # Extract meeting ID, type, and audio data array
                 meeting_id = message.get("meetingId")
                 type = message.get("type")
-                audio_base64 = message.get("data")  # This is now an array of integers
+                audio_base64 = message.get("data")
 
                 if type == "audio" and audio_base64:
-                    # Decode base64 audio data back to bytes
                     try:
                         wav_data = base64.b64decode(audio_base64)
                     except base64.binascii.Error as e:
-                        logger.error(f"Failed to decode base64 audio data: {e}")
+                        logger.error(f"Failed to decode base64 audio: {e}")
                         await ws.send_text(json.dumps({"error": "Invalid base64 audio data"}))
                         continue
 
-                    unique_filename = f"{uuid.uuid4()}_{int(time.time())}.wav"
-                    saved_audio_path = os.path.join(SAVE_DIRECTORY, unique_filename)
+                    filename = f"{uuid.uuid4()}_{int(time.time())}.wav"
+                    saved_audio_path = os.path.join(SAVE_DIRECTORY, filename)
 
-                    # Save WAV file
                     if save_wav_file(wav_data, saved_audio_path):
-                        logger.info(f"Successfully saved WAV file: {saved_audio_path}")
-
-                        # Transcription
                         transcription = transcribe(saved_audio_path)
                         if transcription:
                             message = {
@@ -232,17 +206,14 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                                 "user": username
                             }
 
-                            for client in connected_clients:
+                            for client in meetings.get(meeting_id, []):
                                 await client["websocket"].send_text(json.dumps(message))
 
-                            logger.info(f"Transcription completed: {transcription}")
                             complete_transcription += transcription
                             t += 1
 
                         os.remove(saved_audio_path)
-                        logger.info(f"Deleted audio file: {saved_audio_path}")
                     else:
-                        logger.error("Failed to save WAV file")
                         await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
                 elif type == "end_meeting":
                     delete_faiss_index(os.path.join("indices", f"{meeting_id}.faiss"))
@@ -254,8 +225,7 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                         "type": "summary",
                         "output": output
                     }
-
-                    for client in connected_clients:
+                    for client in meetings.get(meeting_id, []):
                         await client["websocket"].send_text(json.dumps(summary_message))
                 
                 # Perform periodic analysis
@@ -267,7 +237,7 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                         "output": output
                     }
 
-                    for client in connected_clients:
+                    for client in meetings.get(meeting_id, []):
                         await client["websocket"].send_text(json.dumps(analysis_message))
 
                     delta += delta
@@ -281,4 +251,3 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str):
                 break
     except Exception as e:
         logger.error(f"Connection error: {e}")
-        

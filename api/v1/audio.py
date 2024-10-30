@@ -5,15 +5,16 @@ from models.user import User
 from misc.utility import decode_access_token
 from services.realtime_service import connect_to_openai_realtime
 from services.wisper_service import realtime_transcription_using_whisper
-from services.common import connected_clients
+from services.common import meetings
 # rest of your imports and code in AUDIO.py remain the same
 
 router = APIRouter()
 
-@router.websocket("/audio")
-async def websocket_endpoint(websocket: WebSocket):
+@router.websocket("/audio/{meeting_id}")
+async def websocket_endpoint(websocket: WebSocket, meeting_id: str):
     await websocket.accept()
-    
+
+    # Authentication
     token = websocket.query_params.get("token")
     if token is None:
         await websocket.send_text("Authentication required: No token provided.")
@@ -44,11 +45,19 @@ async def websocket_endpoint(websocket: WebSocket):
         return
 
     username = f"{user.first_name} {user.last_name}"
-    connected_clients.append({"websocket": websocket, "username": username})
+
+    # Add user to the specified meeting
+    if meeting_id not in meetings:
+        meetings[meeting_id] = []
+    meetings[meeting_id].append({"websocket": websocket, "username": username})
 
     try:
-        await realtime_transcription_using_whisper(websocket, username)
+        # Run transcription service for the user in the specific meeting
+        await realtime_transcription_using_whisper(websocket, username, meeting_id)
     except WebSocketDisconnect:
-        print(f"Client {user.email} disconnected")
+        print(f"Client {user.email} disconnected from meeting {meeting_id}")
     finally:
-        connected_clients.remove({"websocket": websocket, "username": username})
+        # Remove user from the meeting upon disconnection
+        meetings[meeting_id].remove({"websocket": websocket, "username": username})
+        if not meetings[meeting_id]:  # Remove empty meeting
+            del meetings[meeting_id]
