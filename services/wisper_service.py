@@ -9,6 +9,8 @@ from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
 from services.fais import query_faiss_index, delete_faiss_index
 from services.common import meetings  # Import shared `meetings` dictionary
+from models.user import User
+from models.meeting import Meeting, MeetingStatus
 
 client = OpenAI()
 
@@ -171,7 +173,7 @@ def generate_structured_summary(transcription):
     print(response_json)
     return response_json
 
-async def realtime_transcription_using_whisper(ws: WebSocket, username: str, meetingId: str):
+async def realtime_transcription_using_whisper(ws: WebSocket, user: User, meetingId: str):
     try:
         complete_transcription = ''
         t = 0
@@ -203,7 +205,7 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str, mee
                                 "status": "success",
                                 "type": "transcription",
                                 "text": transcription,
-                                "user": username
+                                "user": f"{user.first_name} {user.last_name}"
                             }
 
                             for client in meetings.get(meeting_id, []):
@@ -217,6 +219,16 @@ async def realtime_transcription_using_whisper(ws: WebSocket, username: str, mee
                         await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
                 elif type == "end_meeting":
                     delete_faiss_index(os.path.join("indices", f"{meeting_id}.faiss"))
+                    # Fetch the meeting by meeting_id and update its status
+                    meeting = await Meeting.get(meeting_id)
+                    if not meeting:
+                        await ws.send_text(json.dumps({"error": "Failed to save audio file"}))
+                    
+                    # Update the meeting status to in_progress and add current user to participants
+                    meeting.status = MeetingStatus.FINISHED
+                    if not await meeting.is_participant(user):
+                        meeting.add_participant(user)
+                    await meeting.save()
                     break
                 elif type == "generate_summary":
                     output = generate_structured_summary(complete_transcription)

@@ -53,7 +53,7 @@ async def websocket_endpoint(websocket: WebSocket, meeting_id: str):
 
     try:
         # Run transcription service for the user in the specific meeting
-        await realtime_transcription_using_whisper(websocket, username, meeting_id)
+        await realtime_transcription_using_whisper(websocket, user, meeting_id)
     except WebSocketDisconnect:
         print(f"Client {user.email} disconnected from meeting {meeting_id}")
     finally:
