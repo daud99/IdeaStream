@@ -48,10 +48,14 @@ async def join_meeting(meeting_id: str, current_user: User = Depends(get_current
         raise HTTPException(status_code=404, detail="Meeting not found.")
     
     # Check and update the meeting status to IN_PROGRESS if it's not already
-    if meeting.status != MeetingStatus.IN_PROGRESS:
+    if meeting.status == MeetingStatus.NEW:
         meeting.status = MeetingStatus.IN_PROGRESS
         await meeting.save()  # Save the updated status to the database
     
+     # Check and update the meeting status to IN_PROGRESS if it's not already
+    if meeting.status == MeetingStatus.FINISHED:
+        raise HTTPException(status_code=404, detail="Meeting ALREADY finished.")
+
     # Check if user is already a participant
     if await meeting.is_participant(current_user):
         return {"message": f"User {current_user.first_name} is already in the meeting."}
