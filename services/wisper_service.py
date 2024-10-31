@@ -62,7 +62,7 @@ def perform_analysis(transcription):
             {
                 "role": "user",
                 "content": f'''
-                You need to generate the titles and respective ideas, and also make sure to categorize each idea based on the following context and transcription:
+                You need to generate the titles and respective ideas, and also make sure to categorize each idea based on the following context and transcription. Importantly, use a maximum of five distinct categories for your ideas. If new ideas do not fit into the existing categories, consolidate them under the closest relevant category instead of creating a new one. 
                 \"\"\"
                 Context:
                 {context}
@@ -229,6 +229,14 @@ async def realtime_transcription_using_whisper(ws: WebSocket, user: User, meetin
                     if not await meeting.is_participant(user):
                         meeting.add_participant(user)
                     await meeting.save()
+                    # Send end meeting acknowledgment to all clients in the meeting
+                    end_meeting_message = {
+                        "status": "success",
+                        "type": "end_meeting",
+                        "message": "The meeting has been successfully ended."
+                    }
+                    for client in meetings.get(meeting_id, []):
+                        await client["websocket"].send_text(json.dumps(end_meeting_message))
                     break
                 elif type == "generate_summary":
                     output = generate_structured_summary(complete_transcription)
