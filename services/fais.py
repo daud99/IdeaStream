@@ -51,7 +51,6 @@ def process_and_index_pdf(file_path: str, meeting_id: str):
     
     # Save the updated index
     faiss.write_index(index, index_path)
-    print(f"Processed and indexed document: {file_path}")
 
 def query_faiss_index(transcription, k=5):
     global chunks, index  # Indicate that we are using the global variables
@@ -65,7 +64,6 @@ def query_faiss_index(transcription, k=5):
     # Step 2: Search in the FAISS index
     distances, indices = index.search(np.array([transcription_embedding]), k)  # k = number of nearest neighbors you want
     
-    print('indices:', indices)
     # Step 3: Retrieve relevant chunks based on indices
     relevant_chunks = [chunks[i] for i in indices[0]]  # Assuming chunks holds the original text or context
     return relevant_chunks
@@ -75,7 +73,6 @@ def delete_faiss_index(index_path="indices/vector_index.faiss"):
     try:
         if os.path.exists(index_path):
             os.remove(index_path)
-            print(f"Successfully deleted the FAISS index at {index_path}.")
         else:
             print(f"No FAISS index found at {index_path}.")
     except Exception as e:

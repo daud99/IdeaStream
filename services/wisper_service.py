@@ -8,7 +8,7 @@ import wave
 from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
 from services.fais import query_faiss_index, delete_faiss_index
-from services.common import meetings  # Import shared `meetings` dictionary
+from core.common import meetings  # Import shared `meetings` dictionary
 from models.user import User
 from models.meeting import Meeting, MeetingStatus
 
@@ -94,8 +94,7 @@ def perform_analysis(transcription):
             }
         ]
     
-    print('final prompt is as follow:')
-    print(prompt)
+
     # Call OpenAI API for completion
     completion = client.chat.completions.create(
         model="gpt-4o",
@@ -156,9 +155,6 @@ def generate_structured_summary(transcription):
     # Access the content attribute correctly from the completion object
     response_text = completion.choices[0].message.content
 
-    print('response_text for summary is as follow:')
-    print(response_text)
-
     # Clean up the response text to extract valid JSON
     response_text = response_text.strip()  # Remove leading/trailing whitespace
     if response_text.startswith('```json') and response_text.endswith('```'):
@@ -169,8 +165,7 @@ def generate_structured_summary(transcription):
         response_json = json.loads(response_text)
     except json.JSONDecodeError:
         response_json = {"error": "Invalid JSON format in response"}
-    print('sending')
-    print(response_json)
+
     return response_json
 
 async def realtime_transcription_using_whisper(ws: WebSocket, user: User, meetingId: str):

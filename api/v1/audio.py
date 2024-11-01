@@ -1,12 +1,15 @@
 import json
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, HTTPException
+import logging
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from jose import JWTError
 from models.user import User
 from misc.utility import decode_access_token
-from services.realtime_service import connect_to_openai_realtime
 from services.wisper_service import realtime_transcription_using_whisper
-from services.common import meetings
-# rest of your imports and code in AUDIO.py remain the same
+from core.common import meetings
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -39,7 +42,7 @@ async def websocket_endpoint(websocket: WebSocket, meeting_id: str):
         await websocket.close(code=1008)
         return
     except Exception as e:
-        print(f"Error during authentication: {str(e)}")
+        logger.info(f"Error during authentication: {str(e)}")
         await websocket.send_text(json.dumps({"msg": "Authentication required: An error occurred."}))
         await websocket.close(code=1008)
         return
@@ -55,7 +58,7 @@ async def websocket_endpoint(websocket: WebSocket, meeting_id: str):
         # Run transcription service for the user in the specific meeting
         await realtime_transcription_using_whisper(websocket, user, meeting_id)
     except WebSocketDisconnect:
-        print(f"Client {user.email} disconnected from meeting {meeting_id}")
+        logger.info(f"Client {user.email} disconnected from meeting {meeting_id}")
     finally:
         # Remove user from the meeting upon disconnection
         meetings[meeting_id].remove({"websocket": websocket, "username": username})

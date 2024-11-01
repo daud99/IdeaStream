@@ -21,7 +21,6 @@ async def create_meeting(meeting: Meeting, current_user: User = Depends(get_curr
         meeting.participants = []
         
         inserted_meeting = await meeting.insert()
-        print("Inserted Meeting ID:", inserted_meeting.id)
 
         # Add the current user as a participant using proper Link initialization
         await meeting.add_participant(current_user)
