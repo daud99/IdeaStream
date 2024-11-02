@@ -2,7 +2,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from models.meeting import Meeting, MeetingStatus
 from models.user import User
-from misc.utility import get_current_user
+from misc.utility import get_current_user, get_participants
 from typing import Dict, Any
 
 router = APIRouter()
@@ -63,3 +63,37 @@ async def join_meeting(meeting_id: str, current_user: User = Depends(get_current
     await meeting.add_participant(current_user)
     
     return {"message": f"User {current_user.first_name} has joined the meeting."}
+
+@router.get("/meeting/{meeting_id}", response_model=Dict[str, Any])
+async def get_meeting(meeting_id: str, current_user: User = Depends(get_current_user)):
+    """
+    Retrieve the details of a specific meeting using its ID.
+    """
+    try:
+        # Fetch the meeting by its ID
+        meeting = await Meeting.get(meeting_id)
+        
+        # If the meeting doesn't exist, raise a 404 error
+        if not meeting:
+            raise HTTPException(status_code=404, detail="Meeting not found.")
+        
+        # Prepare the meeting data to return, including participant details if needed
+        meeting_data = {
+            "meetingId": str(meeting.id),
+            "title": meeting.title,
+            "description": meeting.description,
+            "date_time": meeting.date_time,
+            "duration": meeting.duration,
+            "status": meeting.status,
+            "participants": await get_participants(meeting)
+        }
+        
+        return meeting_data
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to retrieve meeting: {str(e)}"
+        )
+
+

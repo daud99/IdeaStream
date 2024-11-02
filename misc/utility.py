@@ -5,6 +5,7 @@ from core.config import settings
 from jose import jwt, JWTError
 from models.user import User
 from fastapi.security import OAuth2PasswordBearer
+from typing import List  # Import List
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -59,3 +60,18 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
         raise credentials_exception
     
     return user
+
+
+async def get_participants(self) -> List[User]:
+    """Fetch all participants with their full user details."""
+    participants = []
+    for participant_id in self.participants:
+        # Retrieve each user by their ID instead of using fetch()
+        user = await User.get(participant_id)
+        if user:
+            participants.append({
+                "first_name": user.first_name,
+                "last_name": user.last_name,
+                "email": user.email
+            })
+    return participants

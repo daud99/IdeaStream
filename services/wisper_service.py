@@ -258,7 +258,7 @@ async def realtime_transcription_using_whisper(ws: WebSocket, user: User, meetin
                 
                 # Perform periodic analysis
                 if t == delta:
-                    output = perform_analysis(complete_transcription)
+                    output = await perform_analysis(complete_transcription)
                     analysis_message = {
                         "status": "success",
                         "type": "analysis",
