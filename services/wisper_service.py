@@ -5,6 +5,7 @@ import time
 import os
 import logging
 import wave
+import asyncio
 from fastapi import WebSocket, WebSocketDisconnect
 from openai import OpenAI
 from services.fais import query_faiss_index, delete_faiss_index
@@ -53,8 +54,10 @@ def transcribe(audio_file_path):
         logger.error(f"Transcription error: {e}")
         return None
 
-def perform_analysis(transcription):
-    logger.info("BEGIN analysis on the transcription")
+async def perform_analysis(transcription):
+    logger.info("BEGIN async analysis on the transcription")
+
+    # Move blocking code to an async wrapper
     relevant_chunks = query_faiss_index(transcription)
     context = "\n".join(relevant_chunks)
     prompt = [
@@ -107,14 +110,13 @@ def perform_analysis(transcription):
     )
 
     # Access the content attribute correctly from the completion object
-    response_text = completion.choices[0].message.content
+    response_text = completion.choices[0].message.content.strip()
 
     # Clean up the response text to extract valid JSON
-    response_text = response_text.strip()  # Remove leading/trailing whitespace
     if response_text.startswith('```json') and response_text.endswith('```'):
-        response_text = response_text[8:-3].strip()  # Remove the code block markers
+        response_text = response_text[8:-3].strip()  # Remove code block markers
 
-    # Convert the response to a JSON object
+    # Convert the response to JSON format
     try:
         response_json = json.loads(response_text)
     except json.JSONDecodeError:
