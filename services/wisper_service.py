@@ -62,14 +62,19 @@ def perform_analysis(transcription):
             {
                 "role": "user",
                 "content": f'''
-                You need to generate the titles and respective ideas, and also make sure to categorize each idea based on the following context and transcription. Importantly, use a maximum of five distinct categories for your ideas. If new ideas do not fit into the existing categories, consolidate them under the closest relevant category instead of creating a new one. 
-                \"\"\"
-                Context:
-                {context}
+                You need to generate titles and respective ideas, and categorize each idea based on the transcription below, with a slight influence from the context text. Prioritize the transcription content by approximately 60%, while using the context as a 40% reference. 
 
-                Transcription:
-                {transcription}
+                Ensure that you use a maximum of five distinct categories for ideas. If new ideas do not fit into existing categories, consolidate them into the closest relevant category rather than creating a new one.
+
+                You can create more than two suggestion at a time. Number of items in suggestions array can be ranging from 3-10.
                 \"\"\"
+                Transcription (Primary focus):
+                {transcription}
+
+                Context (Secondary reference):
+                {context}
+                \"\"\"
+
                 The result should strictly be in the following JSON format without any extra explanation, text, or comments:
                 {{
                   "titles": [
@@ -126,24 +131,30 @@ def generate_structured_summary(transcription):
         {
             "role": "user",
             "content": f'''
-            Generate a structured summary for the following context and transcription in the format below:
-            \"\"\"
-            Context:
-            {context}
+            Generate a structured and detailed summary for the following transcription, with additional context as a reference. Prioritize the transcription content by approximately 60%, using the context as a secondary influence at 40%. 
 
-            Transcription:
-            {transcription}
             \"\"\"
-            The result should be in JSON format as shown:
+            Transcription (Primary focus):
+            {transcription}
+
+            Context (Secondary reference):
+            {context}
+            \"\"\"
+
+            The result should be in the following JSON format without any additional comments, explanations, or extra text.
+            The structure is defined, but each array should contain a variable number of items based on the meeting details, with a minimum of 5 items and a maximum of 20. Ensure that each array includes between 5 and 20 items as necessary, with detailed information, and make sure nothing is left empty.
+
             {{
-                "key_outcomes": ["Key outcome 1", "Key outcome 2"],
-                "decisions_made": ["Decision 1", "Decision 2"],
-                "action_items": ["Action item 1", "Action item 2"],
-                "overview": "A brief overview of the meeting's main topics.",
-                "important_takeaways": ["Takeaway 1", "Takeaway 2"]
+                "key_outcomes": [],
+                "decisions_made": [],
+                "action_items": [],
+                "overview": "A brief and descriptive overview of the main topics discussed during the meeting.",
+                "important_takeaways": []
             }}
             '''
         }
+
+
     ]
     
     # Call OpenAI API for completion
